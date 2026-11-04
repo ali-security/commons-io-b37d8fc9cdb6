@@ -33,9 +33,22 @@ matrix:
     - jdk: openjdk-ea
       env: JACOCO_SKIP=true
 
+# Travis no longer ships a JDK 14 package for its images; provision AdoptOpenJDK 14.0.2 for that leg.
+before_install:
+  - |
+    if [ "$TRAVIS_JDK_VERSION" = "openjdk14" ]; then
+      wget -q -O /tmp/jdk14.tar.gz "https://github.com/AdoptOpenJDK/openjdk14-binaries/releases/download/jdk-14.0.2%2B12/OpenJDK14U-jdk_x64_linux_hotspot_14.0.2_12.tar.gz"
+      tar -xzf /tmp/jdk14.tar.gz -C "$HOME"
+      export JAVA_HOME="$HOME/jdk-14.0.2+12"
+      export PATH="$JAVA_HOME/bin:$PATH"
+      java -version
+    fi
+
 # --no-transfer-progress requires Maven 3.6.1+. Otherwise use --batch-mode
 script:
   - mvn -V --no-transfer-progress
-
-after_success:
-  - mvn -V --no-transfer-progress clean cobertura:cobertura coveralls:report -Ptravis-cobertura
+  - |
+    awk 'function attr(s,n){ if (match(s, " " n "=\"[0-9]+\"")) return substr(s, RSTART+length(n)+3, RLENGTH-length(n)-4)+0; return 0 }
+      /<testsuite /{ t+=attr($0,"tests"); f+=attr($0,"failures"); e+=attr($0,"errors"); s+=attr($0,"skipped") }
+      /<testcase /{tc=$0} /<skipped/{print "SKIPPED TEST: " tc " " $0}
+      END { printf "TEST SUMMARY: run=%d passed=%d failures=%d errors=%d skipped=%d\n", t, t-f-e-s, f, e, s }' target/surefire-reports/TEST-*.xml
